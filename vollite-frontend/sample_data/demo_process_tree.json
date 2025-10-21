@@ -1,0 +1,28 @@
+{
+  "name": "System",
+  "risk": "Low",
+  "children": [
+    {
+      "name": "notepad.exe (PID 2212)",
+      "risk": "Medium",
+      "children": [
+        {
+          "name": "powershell.exe (PID 3384) [-EncodedCommand]",
+          "risk": "High",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "explorer.exe (PID 1456)",
+      "risk": "Medium",
+      "children": [
+        {
+          "name": "abc123.dll (injected)",
+          "risk": "High",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Contact • volLite{% endblock %}
+{% set video_file = 'videos/homebg.mp4' %}
+{% set no_overlay = true %}  {# disables dark overlay for this page #}
+
+{% block content %}
+<h1>Contact</h1>
+<p>Have questions or want to collaborate? Send a message.</p>
+
+<form class="form" onsubmit="event.preventDefault(); alert('This is a demo. Hook this to an email service or backend endpoint.');">
+  <div class="form-row">
+    <label>Name</label>
+    <input type="text" placeholder="Your name" required>
+  </div>
+  <div class="form-row">
+    <label>Email</label>
+    <input type="email" placeholder="you@example.com" required>
+  </div>
+  <div class="form-row">
+    <label>Message</label>
+    <textarea rows="5" placeholder="How can we help?" required></textarea>
+  </div>
+  <button class="btn" type="submit">Send</button>
+</form>
+{% endblock %}

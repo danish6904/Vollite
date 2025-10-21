@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set video_file = "videos/homebg.mp4" %}
+{% block title %}About • volLite{% endblock %}
+{% block content %}
+
+<div class="overlay-content">
+  <h1>About volLite</h1>
+
+  <p>
+    <strong>volLite – AI-Based Memory Forensics Assistant</strong> is a final year engineering project
+    developed by <strong>Spundan Bhagat, Renu Khade, and Danish Ahmad</strong>.
+  </p>
+
+  <h2>Project Overview</h2>
+  <p>
+    In the field of cybercrime investigations, memory forensics plays a crucial role because attackers often
+    hide malicious behavior in volatile memory (RAM) rather than on disk. Traditional tools like
+    <strong>Volatility</strong> are powerful but require deep expertise and produce raw technical data that
+    is hard to interpret quickly. Investigators often struggle with false positives, lengthy manual
+    analysis, and lack of clear summaries.
+  </p>
+  <p>
+    <strong>volLite</strong> solves this problem by integrating classic forensic data extraction with
+    artificial intelligence to automatically summarize findings, score risks, and provide proactive
+    recommendations. It bridges the gap between raw forensic output and actionable insights that
+    investigators, law enforcement, and security teams can immediately use.
+  </p>
+
+  <h2>Key Features</h2>
+  <ul class="list">
+    <li><strong>AI Summarization</strong> – Converts Volatility plugin outputs into human-readable summaries.</li>
+    <li><strong>Suspicious Process Detection</strong> – Flags anomalies such as encoded PowerShell commands,
+        DLL injection, and abnormal parent-child process relationships.</li>
+    <li><strong>Risk Scoring</strong> – Calculates a percentage score (green → red) to prioritize threats.</li>
+    <li><strong>Process Tree Visualization</strong> – Shows a color-coded hierarchy of processes to easily trace suspicious behavior.</li>
+    <li><strong>Proactive Alerts</strong> – Provides recommended next steps (e.g., “Kill process”, “Quarantine system”).</li>
+    <li><strong>Report Export</strong> – Generates HTML/PDF reports with clear sections:
+        <em>“What Happened”</em> and <em>“What To Do Next”</em>.</li>
+  </ul>
+
+  <h2>Importance</h2>
+  <p>
+    By making forensic analysis faster and easier to understand, <strong>volLite</strong> helps
+    investigators detect threats like ransomware, insider attacks, and advanced malware more efficiently.
+    It reduces human error, saves time, and ensures that even non-experts can understand and act on
+    forensic findings.
+  </p>
+
+  <h2>Future Scope</h2>
+  <ul class="list">
+    <li>Integration with offline/private AI models for secure environments.</li>
+    <li>Live RAM capture and real-time analysis during ongoing cyberattacks.</li>
+    <li>Expansion beyond RAM to include registry keys, event logs, and persistence mechanisms.</li>
+    <li>Custom-trained forensic AI models for higher accuracy and domain-specific detection.</li>
+  </ul>
+</div>
+
+{% endblock %}

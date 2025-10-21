@@ -1,0 +1,33 @@
+[
+  {
+    "severity": "High",
+    "title": "PowerShell spawned from Notepad",
+    "message": "notepad.exe started powershell.exe with suspicious encoded args.",
+    "recommendation": "Immediately suspend/kill powershell.exe and investigate parent notepad.exe. Restrict PowerShell execution policy.",
+    "ioc": [
+      "Parent: notepad.exe (PID 2212)",
+      "Child: powershell.exe (PID 3384)",
+      "Cmdline contains '-EncodedCommand'"
+    ]
+  },
+  {
+    "severity": "Medium",
+    "title": "DLL Injection into explorer.exe",
+    "message": "explorer.exe loaded non-signed DLL from %TEMP% directory.",
+    "recommendation": "Quarantine system, capture memory, and remove persistence. Validate explorer.exe modules and check startup entries.",
+    "ioc": [
+      "Module: C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\abc123.dll",
+      "SHA256: d41d8cd98f00b204e9800998ecf8427e"
+    ]
+  },
+  {
+    "severity": "Low",
+    "title": "Outbound connection anomaly",
+    "message": "Process connected to atypical IP over TLS.",
+    "recommendation": "Block egress to the IP, check DNS logs, and review proxy history.",
+    "ioc": [
+      "IP: 203.0.113.45",
+      "Port: 443"
+    ]
+  }
+]

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set video_file = "videos/homebg.mp4" %}
+{% block title %}Home • volLite{% endblock %}
+
+{% block content %}
+
+<!-- Hero Section -->
+<section class="hero-grid">
+  <div class="hero-left">
+    <h1>volLite – AI-Based Memory Forensics Assistant</h1>
+    <p class="hero-text">
+      Upload a memory dump, get an instant summary, live risk score, color-coded process tree,
+      and actionable alerts. Export an investigator-ready PDF/HTML report with
+      “What Happened” and “What To Do Next”.
+    </p>
+    <div class="btn-row">
+      <a class="btn" href="{{ url_for('dashboard') }}">Launch Dashboard</a>
+      <a class="btn btn-secondary" href="{{ url_for('about') }}">Learn More</a>
+    </div>
+  </div>
+
+  <div class="hero-right card">
+    <div class="feature-list">
+      <div class="feature-item">Live Risk Meter</div>
+      <div class="feature-item">Process Tree</div>
+      <div class="feature-item">Alerts + Actions</div>
+      <div class="feature-item">Report: What Happened &amp; What To Do Next</div>
+    </div>
+  </div>
+</section>
+
+<!-- Features Section -->
+<section class="grid-3 mt">
+  <div class="card feature-card">
+    <h3>AI Summarization</h3>
+    <p>GPT-assisted summaries from Volatility output to reduce analysis time and errors.</p>
+  </div>
+  <div class="card feature-card">
+    <h3>Suspicious Detection</h3>
+    <p>Parent-child tracing, whitelisting, and rule-based checks cut false positives.</p>
+  </div>
+  <div class="card feature-card">
+    <h3>One-click Reports</h3>
+    <p>Export PDF/HTML for investigators with actionable next steps.</p>
+  </div>
+</section>
+
+{% endblock %}

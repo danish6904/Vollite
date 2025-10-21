@@ -1,0 +1,58 @@
+{
+  "risk_score": 82,
+  "risk_level": "Critical",
+  "confidence": 88,
+  "breakdown": {
+    "Malicious Execution": 30,
+    "Process Anomaly": 25,
+    "Network Anomaly": 20,
+    "Suspicious Location": 15,
+    "Code Signing": 10
+  },
+  "risk_factors": [
+    {
+      "category": "Malicious Execution",
+      "severity": "Critical",
+      "description": "PowerShell with encoded command detected",
+      "impact": "+30 points",
+      "details": "Command: powershell.exe -enc SQBFAF8gSQBuAHYAbwBrAGUALQBXAGUAYgBSAGUAcQB1AGUAcwB0AC4A..."
+    },
+    {
+      "category": "Process Anomaly",
+      "severity": "High",
+      "description": "Suspicious parent-child relationship: notepad.exe spawned powershell.exe",
+      "impact": "+25 points",
+      "details": "Path: C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe, PID: 1012"
+    },
+    {
+      "category": "Network Anomaly",
+      "severity": "High",
+      "description": "Connection to suspicious port 4444",
+      "impact": "+20 points",
+      "details": "Remote: 203.0.113.50:4444, Protocol: TCP"
+    },
+    {
+      "category": "Suspicious Location",
+      "severity": "Medium",
+      "description": "Process running from suspicious directory: abc123.tmp.exe",
+      "impact": "+15 points",
+      "details": "Location: C:/Users/Public/Temp/abc123.tmp.exe"
+    },
+    {
+      "category": "Code Signing",
+      "severity": "Medium",
+      "description": "Unsigned binary detected: abc123.tmp.exe",
+      "impact": "+10 points",
+      "details": "Path: C:/Users/Public/Temp/abc123.tmp.exe"
+    }
+  ],
+  "explanation": "Risk score of 82 (Critical) calculated based on 5 security indicators:\n\n\ud83d\udd34 CRITICAL (1 findings):\n  \u2022 PowerShell with encoded command detected (+30 points)\n\n\ud83d\udfe0 HIGH (2 findings):\n  \u2022 Suspicious parent-child relationship: notepad.exe spawned powershell.exe (+25 points)\n  \u2022 Connection to suspicious port 4444 (+20 points)\n\n\ud83d\udfe1 MEDIUM (2 findings):\n  \u2022 Process running from suspicious directory: abc123.tmp.exe (+15 points)\n  \u2022 Unsigned binary detected: abc123.tmp.exe (+10 points)",
+  "recommendations": [
+    "\ud83d\udea8 Immediately isolate system and investigate PowerShell execution",
+    "\ud83d\udd0d Review PowerShell logs and decode suspicious commands",
+    "\u26a0\ufe0f Investigate suspicious parent-child process relationships",
+    "\ud83d\udee1\ufe0f Consider process whitelisting to prevent unusual spawning",
+    "\ud83c\udf10 Block network connections to suspicious IPs/ports",
+    "\ud83d\udcca Review network logs for data exfiltration patterns"
+  ]
+}

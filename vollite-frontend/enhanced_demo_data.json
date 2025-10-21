@@ -1,0 +1,91 @@
+{
+  "summary": "High-Risk Analysis: Simulated APT compromise with multiple attack vectors",
+  "key_findings": [
+    "Risk Level: HIGH - Multiple threat indicators detected",
+    "Processes analyzed: 7",
+    "Network connections: 5",
+    "Registry persistence mechanisms: 3",
+    "Suspicious files: 4"
+  ],
+  "risk_score": 65,
+  "alerts": [
+    {
+      "type": "critical",
+      "title": "High-Risk System Detected",
+      "description": "Multiple threat indicators found - immediate investigation required",
+      "severity": "high",
+      "message": "System shows signs of advanced persistent threat (APT) activity",
+      "recommendation": "Immediately isolate system and begin forensic investigation"
+    },
+    {
+      "type": "warning",
+      "title": "PowerShell with Encoded Commands",
+      "description": "Suspicious PowerShell execution detected",
+      "severity": "critical",
+      "message": "PowerShell with base64 encoded commands and hidden execution",
+      "recommendation": "Review PowerShell logs and decode suspicious commands"
+    },
+    {
+      "type": "warning",
+      "title": "LOLBin Abuse Detected",
+      "description": "Living-off-the-land binary abuse",
+      "severity": "high",
+      "message": "rundll32.exe used for malicious JavaScript execution",
+      "recommendation": "Audit LOLBin usage policies and implement monitoring"
+    },
+    {
+      "type": "warning",
+      "title": "Suspicious Network Activity",
+      "description": "Connections to suspicious ports and IPs",
+      "severity": "high",
+      "message": "Multiple connections to non-standard ports (4444, 8080, 1337)",
+      "recommendation": "Block network connections to suspicious IPs/ports"
+    },
+    {
+      "type": "warning",
+      "title": "Persistence Mechanisms",
+      "description": "Registry-based persistence detected",
+      "severity": "high",
+      "message": "Multiple registry autostart entries for suspicious executables",
+      "recommendation": "Remove suspicious registry entries and reset startup configs"
+    }
+  ],
+  "process_tree": {
+    "name": "System",
+    "risk": "High",
+    "children": [
+      {
+        "name": "explorer.exe",
+        "risk": "Low",
+        "children": [
+          {
+            "name": "powershell.exe",
+            "risk": "Critical",
+            "children": [
+              {
+                "name": "rundll32.exe",
+                "risk": "High"
+              },
+              {
+                "name": "svchost.exe",
+                "risk": "High"
+              }
+            ]
+          },
+          {
+            "name": "notepad.exe",
+            "risk": "Low",
+            "children": [
+              {
+                "name": "cmd.exe",
+                "risk": "High"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "generated_at": "2025-09-20T14:40:42.118500",
+  "status": "completed"
+}

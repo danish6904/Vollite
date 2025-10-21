@@ -1,0 +1,9 @@
+{
+  "summary": "Suspicious behavior detected: powershell.exe spawned from notepad.exe with an encoded command; explorer.exe indicates possible DLL injection attempts.",
+  "key_findings": [
+    "notepad.exe -> powershell.exe with Base64-encoded payload",
+    "explorer.exe loaded unknown DLL from temp directory",
+    "Network connection to unusual external IP (203.0.113.45:443)"
+  ],
+  "risk_score": 81
+}
