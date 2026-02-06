@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Dashboard • volLite{% endblock %}
+{% block content %}
+<h1>Investigation Dashboard</h1>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Upload Memory Dump</h2>
+    <form id="uploadForm">
+      <input type="file" id="dumpFile" name="dump" accept=".raw,.mem,.dmp,.img">
+      <div class="row gap">
+        <button class="btn" type="submit">Analyze</button>
+        <button class="btn btn-secondary" id="simulateBtn" type="button">Use Demo Data</button>
+      </div>
+      <small class="muted">Demo: Enhanced risk analysis with realistic threat detection. Real analysis available with
+        actual memory dumps.</small>
+    </form>
+  </section>
+
+  <section class="card center">
+    <h2>Risk Score</h2>
+    <div id="riskMeter" class="ring" data-value="0">
+      <div class="ring-center" id="riskValue">0%</div>
+    </div>
+    <small class="muted">Green → Red</small>
+  </section>
+</div>
+
+<section class="card mt">
+  <h2>Summary</h2>
+  <p id="summaryText" class="lead">—</p>
+  <ul id="findingsList" class="list"></ul>
+</section>
+
+<section class="grid-2 mt">
+  <div class="card">
+    <h2>Process Tree</h2>
+    <div id="processTree" class="tree"></div>
+  </div>
+  <div class="card">
+    <h2>Alerts & Recommendations</h2>
+    <div id="alertsPanel" class="alerts"></div>
+  </div>
+</section>
+
+<section class="card mt" id="aiInsightsSection" style="display:none; border-color: #3d5a80;">
+  <h2>🤖 AI Insights</h2>
+  <div id="aiInsightsError" class="muted" style="display:none;"></div>
+
+  <div id="aiInsightsSummaryBlock">
+    <h3>Threat Assessment</h3>
+    <div id="aiSummaryText" style="
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+      font-size: 1rem !important;
+      line-height: 1.6;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal !important;
+      max-width: 100%;
+    "></div>
+  </div>
+
+  <div id="aiInsightsMeta" class="muted" style="font-size: 0.85rem; margin-top:12px;"></div>
+
+  <div id="aiInsightsSimilarBlock" style="display:none; margin-top:16px;">
+    <h3>Similar Cases</h3>
+    <ul id="aiSimilarList" class="list"></ul>
+  </div>
+
+  <div id="aiInsightsRecsBlock" style="display:none; margin-top:16px;">
+    <h3>AI Recommendations</h3>
+    <ol id="aiRecsList" class="list"></ol>
+  </div>
+</section>
+
+<section class="card mt">
+  <h2>Export Precautionary Report</h2>
+  <button id="exportBtn" class="btn">Download HTML Report</button>
+  <small class="muted">Open the HTML and use your browser's <em>Print → Save as PDF</em> if needed.</small>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
