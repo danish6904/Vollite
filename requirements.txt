@@ -1,4 +1,4 @@
-# Phase 1 Requirements for volLite
+﻿# Phase 1 Requirements for volLite
 Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
 Flask-JWT-Extended==4.6.0
@@ -10,3 +10,7 @@ python-dotenv==1.0.0
 python-magic-bin==0.4.14
 Werkzeug==3.0.1
 volatility3==2.5.0
+langchain
+chromadb
+ollama
+sentence-transformers
