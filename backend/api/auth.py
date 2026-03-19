@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from werkzeug.security import check_password_hash
 from models import db
 from models.user import User
 from utils.security import validate_json_request
+from utils.rate_limit import limiter
 import re
+import logging
 
 auth_bp = Blueprint('auth', __name__)
+logger = logging.getLogger(__name__)
 
 def validate_email(email):
     """Validate email format"""
@@ -31,6 +33,7 @@ def validate_password(password):
 
 @auth_bp.route('/register', methods=['POST'])
 @validate_json_request(['username', 'email', 'password'])
+@limiter.limit(lambda: current_app.config.get('AUTH_REGISTER_RATE_LIMIT', '5 per minute'))
 def register():
     """User registration endpoint"""
     try:
@@ -76,6 +79,7 @@ def register():
         # Generate access token
         access_token = create_access_token(identity=str(new_user.id))
 
+        logger.info('auth_register_success', extra={'event': 'auth_register_success'})
         return jsonify({
             'message': 'User registered successfully',
             'access_token': access_token,
@@ -84,10 +88,12 @@ def register():
 
     except Exception as e:
         db.session.rollback()
+        logger.exception('auth_register_failed', extra={'event': 'auth_register_failed'})
         return jsonify({'error': f'Registration failed: {str(e)}'}), 500
 
 @auth_bp.route('/login', methods=['POST'])
 @validate_json_request(['username', 'password'])
+@limiter.limit(lambda: current_app.config.get('AUTH_LOGIN_RATE_LIMIT', '10 per minute'))
 def login():
     """User login endpoint"""
     try:
@@ -105,17 +111,21 @@ def login():
         ).first()
 
         if not user:
+            logger.warning('auth_login_invalid_user', extra={'event': 'auth_login_invalid_user'})
             return jsonify({'error': 'Invalid username or password'}), 401
 
         if not user.is_active:
+            logger.warning('auth_login_inactive_user', extra={'event': 'auth_login_inactive_user'})
             return jsonify({'error': 'Account is disabled'}), 401
 
         if not user.check_password(password):
+            logger.warning('auth_login_invalid_password', extra={'event': 'auth_login_invalid_password'})
             return jsonify({'error': 'Invalid username or password'}), 401
 
         # Generate access token
         access_token = create_access_token(identity=str(user.id))
 
+        logger.info('auth_login_success', extra={'event': 'auth_login_success'})
         return jsonify({
             'message': 'Login successful',
             'access_token': access_token,
@@ -123,6 +133,7 @@ def login():
         }), 200
 
     except Exception as e:
+        logger.exception('auth_login_failed', extra={'event': 'auth_login_failed'})
         return jsonify({'error': f'Login failed: {str(e)}'}), 500
 
 @auth_bp.route('/profile', methods=['GET'])
@@ -146,6 +157,7 @@ def get_profile():
 @auth_bp.route('/change-password', methods=['POST'])
 @jwt_required()
 @validate_json_request(['current_password', 'new_password'])
+@limiter.limit(lambda: current_app.config.get('AUTH_CHANGE_PASSWORD_RATE_LIMIT', '5 per minute'))
 def change_password():
     """Change user password"""
     try:
@@ -180,6 +192,7 @@ def change_password():
 
 @auth_bp.route('/verify-token', methods=['POST'])
 @jwt_required()
+@limiter.limit(lambda: current_app.config.get('AUTH_VERIFY_TOKEN_RATE_LIMIT', '30 per minute'))
 def verify_token():
     """Verify if token is valid"""
     try:

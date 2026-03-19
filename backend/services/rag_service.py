@@ -10,30 +10,34 @@ from datetime import datetime
 import logging
 
 try:
-    # Newer LangChain package layout
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_community.vectorstores import Chroma
-    from langchain_community.llms import Ollama
+    from langchain_chroma import Chroma
     LANGCHAIN_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     try:
         # Fallback to older LangChain imports
         from langchain.text_splitter import RecursiveCharacterTextSplitter
         from langchain_community.embeddings import HuggingFaceEmbeddings
-        from langchain.vectorstores import Chroma
-        from langchain.llms import Ollama
+        from langchain_community.vectorstores import Chroma
         LANGCHAIN_AVAILABLE = True
-    except ImportError as e2:
+    except ImportError:
         LANGCHAIN_AVAILABLE = False
-        print(f"Warning: LangChain not installed correctly. RAG features will be disabled.")
+        logging.getLogger(__name__).warning("LangChain not installed correctly. RAG features will be disabled.")
+
+try:
+    from langchain_groq import ChatGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    logging.getLogger(__name__).warning("langchain-groq not installed. Install with: pip install langchain-groq")
 
 try:
     import chromadb
     CHROMADB_AVAILABLE = True
 except ImportError:
     CHROMADB_AVAILABLE = False
-    print("Warning: ChromaDB not installed. Vector storage will be disabled.")
+    logging.getLogger(__name__).warning("ChromaDB not installed. Vector storage will be disabled.")
 
 
 class ForensicsRAGService:
@@ -55,8 +59,9 @@ class ForensicsRAGService:
         """
         self.logger = logging.getLogger(__name__)
         self.vector_store_path = vector_store_path
-        self.model_name = model_name or os.getenv("RAG_MODEL", "tinyllama")
+        self.model_name = model_name or os.getenv("RAG_MODEL", "llama-3.3-70b-versatile")
         self.embedding_model = embedding_model
+        self.groq_api_key = os.getenv("GROQ_API_KEY", "")
         
         # Check if dependencies are available
         if not LANGCHAIN_AVAILABLE:
@@ -106,15 +111,26 @@ class ForensicsRAGService:
             self.vector_store = None
     
     def _init_llm(self):
-        """Initialize LLM (Ollama)"""
+        """Initialize LLM (Groq cloud API)"""
+        if not GROQ_AVAILABLE:
+            self.logger.warning("langchain-groq not installed. LLM disabled.")
+            self.llm = None
+            return
+
+        if not self.groq_api_key:
+            self.logger.warning("GROQ_API_KEY not set. LLM disabled. Get a free key at https://console.groq.com")
+            self.llm = None
+            return
+
         try:
-            self.llm = Ollama(
+            self.llm = ChatGroq(
                 model=self.model_name,
-                temperature=0.3  # Lower temperature for more focused responses
+                api_key=self.groq_api_key,
+                temperature=0.3,
             )
-            self.logger.info(f"Initialized LLM: {self.model_name}")
+            self.logger.info(f"Initialized Groq LLM: {self.model_name}")
         except Exception as e:
-            self.logger.warning(f"Failed to initialize LLM: {e}")
+            self.logger.warning(f"Failed to initialize Groq LLM: {e}")
             self.llm = None
     
     def _init_knowledge_base(self):
@@ -246,7 +262,17 @@ class ForensicsRAGService:
         Returns:
             Enhanced analysis with AI insights
         """
-        if not self.available or not self.llm:
+        if not self.available:
+            analysis_data['ai_insights'] = {
+                'error': 'RAG service not available. Check LangChain/ChromaDB installation.'
+            }
+            return analysis_data
+
+        if not self.llm:
+            reason = 'GROQ_API_KEY not set' if not self.groq_api_key else 'LLM failed to initialize'
+            analysis_data['ai_insights'] = {
+                'error': f'AI model unavailable: {reason}. Check your .env configuration.'
+            }
             return analysis_data
         
         try:
@@ -260,7 +286,8 @@ class ForensicsRAGService:
             prompt = self._create_analysis_prompt(analysis_data, similar_cases)
             
             # Get LLM response
-            ai_insights = self.llm.invoke(prompt)
+            response = self.llm.invoke(prompt)
+            ai_insights = response.content if hasattr(response, 'content') else str(response)
             
             # Clean response of prompt artifacts
             ai_insights = self._clean_llm_response(ai_insights)
@@ -276,6 +303,9 @@ class ForensicsRAGService:
         
         except Exception as e:
             self.logger.error(f"Failed to analyze with context: {e}")
+            analysis_data['ai_insights'] = {
+                'error': f'AI analysis failed: {str(e)}'
+            }
             return analysis_data
     
     def _clean_llm_response(self, text: str) -> str:
@@ -366,8 +396,8 @@ Alerts: {len(analysis_data.get('alerts', []))} alerts detected
 Write 2-3 paragraphs suitable for an executive summary.
 """
             
-            summary = self.llm.invoke(prompt)
-            return summary
+            response = self.llm.invoke(prompt)
+            return response.content if hasattr(response, 'content') else str(response)
         
         except Exception as e:
             self.logger.error(f"Failed to generate summary: {e}")
@@ -404,8 +434,8 @@ Provide:
 3. Typical next steps (2-3 bullet points)
 """
             
-            explanation = self.llm.invoke(prompt)
-            return explanation
+            response = self.llm.invoke(prompt)
+            return response.content if hasattr(response, 'content') else str(response)
         
         except Exception as e:
             self.logger.error(f"Failed to explain finding: {e}")
@@ -446,12 +476,13 @@ Focus on immediate actions and investigation priorities.
 Format as numbered list.
 """
             
-            response = self.llm.invoke(prompt)
+            llm_response = self.llm.invoke(prompt)
+            response_text = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
             
             # Parse recommendations
             recommendations = [
                 line.strip() 
-                for line in response.split('\n') 
+                for line in response_text.split('\n') 
                 if line.strip() and any(c.isdigit() for c in line[:3])
             ]
             

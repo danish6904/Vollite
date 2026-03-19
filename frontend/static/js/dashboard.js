@@ -143,15 +143,47 @@ function renderAiInsights(aiInsights) {
   }
 }
 
+// Poll a background job until it finishes or fails
+async function pollJob(jobId) {
+  const POLL_INTERVAL = 2000; // 2 seconds
+  const MAX_POLLS = 150;      // 5 minutes max
+
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    const res = await fetch(`/api/jobs/status/${jobId}`);
+    if (!res.ok) throw new Error("Failed to check job status");
+    const info = await res.json();
+
+    if (info.status === "finished") return info.result;
+    if (info.status === "failed") throw new Error(info.error || "Analysis job failed");
+
+    // Update UI with progress indicator
+    document.getElementById("summaryText").textContent =
+      `Analysis in progress\u2026 (${info.status})`;
+  }
+  throw new Error("Analysis timed out");
+}
+
 async function analyze(formDataOrSimulate) {
+  // Show immediate feedback
+  document.getElementById("summaryText").textContent = "Starting analysis\u2026";
+
   let res;
   if (formDataOrSimulate instanceof FormData) {
     res = await fetch("/api/analyze", { method: "POST", body: formDataOrSimulate });
   } else {
     res = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ simulate: true }) });
   }
-  if (!res.ok) throw new Error("Analysis failed");
-  const data = await res.json();
+
+  if (!res.ok && res.status !== 202) throw new Error("Analysis failed");
+
+  let data = await res.json();
+
+  // If the server queued the job (202), poll until done
+  if (res.status === 202 && data.job_id) {
+    document.getElementById("summaryText").textContent = "Analysis queued\u2026 waiting for results";
+    data = await pollJob(data.job_id);
+  }
 
   // Summary
   document.getElementById("summaryText").textContent = data.summary || "—";

@@ -1,16 +1,19 @@
 from models import db
 from flask import current_app
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def init_database():
     """Initialize database tables"""
     try:
         # Create tables if they don't exist
         db.create_all()
-        print("Database tables created successfully")
+        logger.info("Database tables created successfully")
         return True
     except Exception as e:
-        print(f"Error creating database tables: {e}")
+        logger.exception("Error creating database tables")
         return False
 
 def reset_database():
@@ -20,10 +23,10 @@ def reset_database():
         db.drop_all()
         # Create all tables
         db.create_all()
-        print("Database reset successfully")
+        logger.info("Database reset successfully")
         return True
     except Exception as e:
-        print(f"Error resetting database: {e}")
+        logger.exception("Error resetting database")
         return False
 
 def check_database_connection():

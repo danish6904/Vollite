@@ -1,9 +1,18 @@
 import os
 import secrets
+import logging
 from functools import wraps
 from flask import request, jsonify, current_app
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from models.user import User
+
+logger = logging.getLogger(__name__)
+
+INSECURE_DEFAULTS = {
+    'dev-secret-key-change-in-production',
+    'your-secret-key-change-this-in-production',
+    'your-jwt-secret-change-this-in-production',
+}
 
 def generate_secure_filename(original_filename, prefix='upload'):
     """Generate a secure filename"""
@@ -60,7 +69,7 @@ def secure_delete_file(file_path):
             os.remove(file_path)
             return True
     except Exception as e:
-        print(f"Error securely deleting file {file_path}: {e}")
+        logger.exception("Error securely deleting file %s", file_path)
         return False
 
     return False
@@ -118,5 +127,38 @@ class SecurityHeaders:
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self' data:; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "frame-ancestors 'none'"
+        )
+        if request.is_secure:
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         return response
+
+
+def validate_security_configuration(app):
+    """Validate security-critical configuration for non-development environments."""
+    app_env = app.config.get('APP_ENV', 'development').lower()
+    if app_env in {'development', 'test', 'testing'}:
+        return
+
+    secret_key = app.config.get('SECRET_KEY', '')
+    jwt_secret = app.config.get('JWT_SECRET_KEY', '')
+
+    if not secret_key or secret_key in INSECURE_DEFAULTS or len(secret_key) < 32:
+        raise RuntimeError('SECURITY: SECRET_KEY must be set to a strong value in non-development environments')
+
+    if not jwt_secret or jwt_secret in INSECURE_DEFAULTS or len(jwt_secret) < 32:
+        raise RuntimeError('SECURITY: JWT_SECRET_KEY must be set to a strong value in non-development environments')
+
+    cors_origins = app.config.get('CORS_ORIGINS', [])
+    if '*' in cors_origins:
+        raise RuntimeError('SECURITY: wildcard CORS is not allowed in non-development environments')

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, make_response
+from flask import Flask, render_template, request, jsonify, make_response, g
 from flask_cors import CORS
 from flask_migrate import Migrate
 import os
@@ -10,32 +10,44 @@ from config import config
 
 # Import database and models
 from models import db, init_db
-from models.user import User
-from models.analysis import AnalysisSession, AnalysisResult, Alert
 
 # Import API blueprints
 from api import register_blueprints
 
 # Import utilities
-from utils.database import init_database, check_database_connection
-from utils.security import SecurityHeaders
+from utils.security import SecurityHeaders, validate_security_configuration
+from utils.monitoring import (
+    begin_request_tracking,
+    build_health_snapshot,
+    configure_logging,
+    finalize_response,
+)
+from utils.rate_limit import limiter
 
 # Import services (moved to top level)
 from services.file_validator import FileValidator
 from services.volatility_service import VolatilityService
 from utils.security import generate_secure_filename
 from services.rag_service import get_rag_service
+from services.job_service import enqueue_job, run_analysis_job, run_simulate_job
 
-# In your app.py, add:
-from services.risk_analyzer import RiskAnalyzer
 from utils.tree_builder import build_process_tree
 
 def create_app(config_name=None):
     """Application factory"""
-    # Load environment variables from .env if present
-    load_dotenv()
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    frontend_dir = os.path.join(project_root, 'frontend')
+    env_path = os.path.join(backend_dir, '.env')
 
-    app = Flask(__name__)
+    # Load environment variables from .env if present
+    load_dotenv(env_path)
+
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(frontend_dir, 'templates'),
+        static_folder=os.path.join(frontend_dir, 'static'),
+    )
 
     # Load configuration
     if config_name:
@@ -46,10 +58,13 @@ def create_app(config_name=None):
         # Ensure secrets are set for JWT
         app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
         app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', app.config['SECRET_KEY'])
-        app.config['CORS_ORIGINS'] = ['http://localhost:5000']  # Define CORS origins
-        app.config['UPLOAD_FOLDER'] = 'uploads'
+        app.config['UPLOAD_FOLDER'] = os.path.join(backend_dir, 'uploads')
         app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB
         app.config['DEBUG'] = False
+    app.config['APP_START_TIME'] = datetime.utcnow()
+
+    configure_logging(app)
+    validate_security_configuration(app)
 
     # Initialize database
     init_db(app)
@@ -59,15 +74,21 @@ def create_app(config_name=None):
 
     # Initialize extensions
     CORS(app, origins=app.config['CORS_ORIGINS'])
-    migrate = Migrate(app, db)
+    Migrate(app, db)
+    limiter.init_app(app)
 
     # Register API blueprints
     register_blueprints(app)
 
+    @app.before_request
+    def before_request():
+        begin_request_tracking()
+
     # Security headers middleware
     @app.after_request
     def after_request(response):
-        return SecurityHeaders.add_security_headers(response)
+        response = SecurityHeaders.add_security_headers(response)
+        return finalize_response(response)
 
     # Original frontend routes
     @app.route('/')
@@ -90,13 +111,8 @@ def create_app(config_name=None):
     @app.route('/api/health')
     def health_check():
         """Health check endpoint"""
-        db_status = check_database_connection()
-        return jsonify({
-            'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
-            'database': db_status['status'],
-            'version': '1.0.0-phase1'
-        })
+        snapshot = build_health_snapshot(app)
+        return jsonify(snapshot)
 
     # System info endpoint
     @app.route('/api/system/info')
@@ -104,10 +120,16 @@ def create_app(config_name=None):
         """System information endpoint"""
         vol_service = VolatilityService()
         vol_status = vol_service.check_volatility_available()
+        snapshot = build_health_snapshot(app)
 
         return jsonify({
             'volatility': vol_status,
-            'database': check_database_connection(),
+            'database': snapshot['database'],
+            'redis': snapshot['redis'],
+            'rag': snapshot['rag'],
+            'disk': snapshot['disk'],
+            'request_id': snapshot['request_id'],
+            'uptime_seconds': snapshot['uptime_seconds'],
             'upload_folder': app.config['UPLOAD_FOLDER'],
             'max_file_size': app.config['MAX_CONTENT_LENGTH']
         })
@@ -121,6 +143,7 @@ def create_app(config_name=None):
         """
         try:
             data = request.get_json()
+            app.logger.info('report_export_requested', extra={'event': 'report_export_requested'})
 
             # Create enhanced report data
             report_data = {
@@ -151,6 +174,7 @@ def create_app(config_name=None):
             return response
 
         except Exception as e:
+            app.logger.exception('report_export_failed', extra={'event': 'report_export_failed'})
             return jsonify({'error': f'Failed to generate report: {str(e)}'}), 500
 
     # Legacy analyze endpoint (enhanced but backward compatible)
@@ -161,6 +185,7 @@ def create_app(config_name=None):
         Enhanced with basic file validation and storage
         """
         try:
+            app.logger.info('analysis_requested', extra={'event': 'analysis_requested'})
             # Check for simulate flag
             simulate = False
             if request.is_json:
@@ -170,6 +195,17 @@ def create_app(config_name=None):
 
             # If simulate mode, return demo data
             if simulate:
+                # Try to queue as background job
+                job_id = enqueue_job(run_simulate_job)
+                if job_id is not None:
+                    app.logger.info('analysis_queued', extra={'event': 'analysis_queued'})
+                    return jsonify({
+                        'status': 'queued',
+                        'job_id': job_id,
+                        'message': 'Simulated analysis queued'
+                    }), 202
+
+                # Sync fallback (no Redis)
                 import random
                 scenarios = get_demo_scenarios()
                 
@@ -259,7 +295,31 @@ def create_app(config_name=None):
                     # Build tree from the SELECTED scenario
                     process_tree = build_process_tree(scenario['processes'])
 
-                    # For Phase 1, return enhanced demo data with file info
+                    # Prepare scenario data for the job
+                    scenario_data = {
+                        'name': scenario['name'],
+                        'processes': scenario['processes'],
+                        'findings': scenario['findings'],
+                        'alerts': scenario['alerts'],
+                        'risk_score': risk_score,
+                    }
+
+                    # Try to queue as background job
+                    job_id = enqueue_job(
+                        run_analysis_job,
+                        file.filename,
+                        validation_result['file_info'],
+                        scenario_data,
+                    )
+                    if job_id is not None:
+                        return jsonify({
+                            'status': 'queued',
+                            'job_id': job_id,
+                            'message': 'Analysis queued for background processing',
+                            'file_info': validation_result['file_info'],
+                        }), 202
+
+                    # Sync fallback (no Redis)
                     demo_data = {
                         'summary': f"Analysis completed for {file.filename} ({scenario['name']})",
                         'key_findings': scenario['findings'],
@@ -292,36 +352,36 @@ def create_app(config_name=None):
             }), 400
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            app.logger.exception('analysis_failed', extra={'event': 'analysis_failed'})
             return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
 
     # Error handlers
     @app.errorhandler(400)
     def bad_request(error):
-        return jsonify({'error': 'Bad request'}), 400
+        return jsonify({'error': 'Bad request', 'request_id': getattr(g, 'request_id', None)}), 400
 
     @app.errorhandler(401)
     def unauthorized(error):
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'error': 'Unauthorized', 'request_id': getattr(g, 'request_id', None)}), 401
 
     @app.errorhandler(403)
     def forbidden(error):
-        return jsonify({'error': 'Forbidden'}), 403
+        return jsonify({'error': 'Forbidden', 'request_id': getattr(g, 'request_id', None)}), 403
 
     @app.errorhandler(404)
     def not_found(error):
-        return jsonify({'error': 'Not found'}), 404
+        return jsonify({'error': 'Not found', 'request_id': getattr(g, 'request_id', None)}), 404
 
     @app.errorhandler(413)
     def request_entity_too_large(error):
-        return jsonify({'error': 'File too large'}), 413
+        return jsonify({'error': 'File too large', 'request_id': getattr(g, 'request_id', None)}), 413
 
     @app.errorhandler(500)
     def internal_error(error):
         if hasattr(db, 'session'):
             db.session.rollback()
-        return jsonify({'error': 'Internal server error'}), 500
+        app.logger.exception('internal_server_error', extra={'event': 'internal_server_error'})
+        return jsonify({'error': 'Internal server error', 'request_id': getattr(g, 'request_id', None)}), 500
 
     return app
 

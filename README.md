@@ -32,9 +32,9 @@ It now features **RAG-based AI Analysis**, allowing the system to use local fore
 ### Prerequisites
 
 - Python 3.8 or higher
-- PostgreSQL database
 - Git
-- (Optional) Local LLM setup (e.g., Ollama) for RAG features
+- (Optional) Redis for background jobs
+- (Optional) Groq API key for AI features
 
 ### Installation
 
@@ -42,6 +42,7 @@ It now features **RAG-based AI Analysis**, allowing the system to use local fore
 ```bash
 git clone https://github.com/danish6904/Vollite.git
 cd Vollite/vollite-frontend
+cd backend
 ```
 
 2. **Create virtual environment**
@@ -72,7 +73,8 @@ Edit `.env` with your settings (including RAG configuration if using AI features
 5. **Initialize database**
 ```bash
 python
->>> from app import app, db
+>>> from app import app
+>>> from models import db
 >>> with app.app_context():
 >>>     db.create_all()
 >>> exit()
@@ -87,34 +89,53 @@ python app.py
 
 Open your browser to `http://localhost:5000`
 
+## ▶️ Running Commands
+
+Run these from the project root (`vollite-frontend`) unless noted.
+
+### Start the app
+
+```bash
+cd backend
+python app.py
+```
+
+### Run tests
+
+```bash
+cd backend
+python -m pytest -q
+```
+
+### Run Volatility helper
+
+```bash
+cd backend
+./vol.cmd -h
+```
+
 ## 📁 Project Structure
 
 ```
 vollite-frontend/
-├── app.py                      # Main application entry point
-├── config.py                   # Configuration settings
-├── requirements.txt            # Python dependencies
+├── backend/                    # Flask API and analysis engine
+│   ├── app.py                  # Main application entry point
+│   ├── config.py               # Configuration settings
+│   ├── requirements.txt        # Python dependencies
+│   ├── api/                    # REST API endpoints
+│   ├── models/                 # Database models
+│   ├── services/               # Business logic
+│   ├── utils/                  # Utility functions
+│   ├── tests/                  # Pytest suite
+│   ├── uploads/                # Uploaded dump files
+│   └── data/                   # Vector store and local data
 │
-├── api/                        # REST API endpoints
-│   ├── auth.py                 # Authentication
-│   ├── analysis.py             # Analysis endpoints
-│   └── enhanced_analysis_endpoints.py # RAG & Advanced Analysis
+├── frontend/                   # Web UI assets
+│   ├── templates/              # HTML templates
+│   └── static/                 # CSS, JS, media files
 │
-├── models/                     # Database models
-│   ├── user.py                 # User model
-│   └── analysis.py             # Analysis models
-│
-├── services/                   # Business logic
-│   ├── volatility_service.py   # Volatility integration
-│   ├── rag_service.py          # RAG AI Service
-│   ├── file_validator.py       # File validation
-│   └── risk_analyzer.py        # Risk assessment
-│
-├── templates/                  # HTML templates
-├── static/                     # CSS, JS, media files
-└── utils/                      # Utility functions
-    ├── tree_builder.py         # Process tree visualization
-    └── security.py             # Security utilities
+├── docs/                       # Project documentation
+└── README.md
 ```
 
 ## 📊 Current Status: Phase 2 (RAG Integration)
@@ -159,7 +180,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - [Volatility Foundation](https://www.volatilityfoundation.org/) - Memory forensics framework
-- [Ollama](https://ollama.ai/) - Local LLM runtime
+- [Groq](https://console.groq.com/) - Cloud LLM inference API
 - Flask community for excellent documentation
 
 ---
