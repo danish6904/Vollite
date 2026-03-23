@@ -58,6 +58,57 @@
     .small {
       font-size: 12px;
     }
+
+    .risk-breakdown {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 12px 0;
+    }
+
+    .risk-component {
+      background: #f5f5f5;
+      border-left: 4px solid #999;
+      padding: 12px;
+      border-radius: 6px;
+    }
+
+    .risk-component.activity {
+      border-color: #ff9500;
+    }
+
+    .risk-component.llm {
+      border-color: #0066cc;
+    }
+
+    .risk-formula {
+      background: #f0f0f0;
+      border-left: 4px solid #666;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      margin: 12px 0;
+    }
+
+    .issue-item {
+      background: #fafafa;
+      border-left: 4px solid #28a745;
+      padding: 8px 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .score-value {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 8px 0;
+    }
+
+    .score-label {
+      color: #555;
+      font-size: 12px;
+    }
   </style>
 </head>
 
@@ -109,6 +160,61 @@
 
   <h2>Risk Score</h2>
   <div class="box"><strong>{{ risk_score }}%</strong></div>
+
+  {% if ai_insights and ai_insights.risk_quantification %}
+  <h2>Risk Score Breakdown</h2>
+  <div class="box">
+    {% set quantData = ai_insights.risk_quantification %}
+
+    {% if quantData.final %}
+    <h3>Score Formula</h3>
+    <div class="risk-formula">
+      {{ quantData.final.equation or "final = (activity_score × 0.80) + (llm_score × 0.20)" }}
+    </div>
+    <p class="small muted">
+      Final score: <strong>{{ quantData.final.score }}</strong>
+      ({{ quantData.final.activity_points }} pts from activity + {{ quantData.final.llm_points }} pts from LLM analysis)
+    </p>
+    {% endif %}
+
+    <div class="risk-breakdown">
+      {% if quantData.activity %}
+      <div class="risk-component activity">
+        <h4 style="margin-top: 0;">Activity Contribution</h4>
+        <div class="score-value">{{ quantData.activity.score }}%</div>
+        {% if quantData.activity.quantification %}
+        <div class="score-label">
+          Process: {{ (quantData.activity.quantification.percent_of_activity_score.process or 0) | round(1) }}%<br>
+          Network: {{ (quantData.activity.quantification.percent_of_activity_score.network or 0) | round(1) }}%<br>
+          System: {{ (quantData.activity.quantification.percent_of_activity_score.system or 0) | round(1) }}%
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if quantData.llm %}
+      <div class="risk-component llm">
+        <h4 style="margin-top: 0;">LLM Findings Contribution</h4>
+        <div class="score-value">{{ quantData.llm.score }}%</div>
+        {% if quantData.llm.available == False %}
+        <div class="score-label">No AI findings available</div>
+        {% else %}
+        <div class="score-label">Based on threat analysis</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if quantData.llm and quantData.llm.issues %}
+    <h3>Top Contributing Issues</h3>
+    {% for issue in quantData.llm.issues %}
+    <div class="issue-item">
+      <strong>{{ issue.issue }}</strong> <span class="score-label">(+{{ issue.points }} points)</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
 
   <h2>What To Do Next (Precautionary Actions)</h2>
   <div class="box">

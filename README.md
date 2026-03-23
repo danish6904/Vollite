@@ -42,7 +42,6 @@ It now features **RAG-based AI Analysis**, allowing the system to use local fore
 ```bash
 git clone https://github.com/danish6904/Vollite.git
 cd Vollite/vollite-frontend
-cd backend
 ```
 
 2. **Create virtual environment**
@@ -58,23 +57,23 @@ source .venv/bin/activate
 
 3. **Install dependencies**
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 4. **Configure environment**
 
 Copy the example environment file:
 ```bash
-cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
-Edit `.env` with your settings (including RAG configuration if using AI features).
+Edit `backend/.env` with your settings (including RAG configuration if using AI features).
 
 5. **Initialize database**
 ```bash
 python
->>> from app import app
->>> from models import db
+>>> from backend.app import app
+>>> from backend.models import db
 >>> with app.app_context():
 >>>     db.create_all()
 >>> exit()
@@ -82,7 +81,7 @@ python
 
 6. **Run the application**
 ```bash
-python app.py
+python launcher.py
 ```
 
 7. **Access the application**
@@ -96,8 +95,7 @@ Run these from the project root (`vollite-frontend`) unless noted.
 ### Start the app
 
 ```bash
-cd backend
-python app.py
+python launcher.py
 ```
 
 ### Run tests

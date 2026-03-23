@@ -30,6 +30,7 @@ from services.volatility_service import VolatilityService
 from utils.security import generate_secure_filename
 from services.rag_service import get_rag_service
 from services.job_service import enqueue_job, run_analysis_job, run_simulate_job
+from services.risk_analyzer import RiskAnalyzer
 
 from utils.tree_builder import build_process_tree
 
@@ -239,6 +240,28 @@ def create_app(config_name=None):
                     demo_data['ai_insights'] = enhanced_data.get('ai_insights', {})
                 except Exception:
                     demo_data['ai_insights'] = {'error': 'AI analysis unavailable'}
+                # Ensure ai_insights is always a dict
+                if not isinstance(demo_data.get('ai_insights'), dict):
+                    demo_data['ai_insights'] = {}
+
+                
+                # Add risk quantification
+                try:
+                    risk_analyzer = RiskAnalyzer()
+                    activity_analysis = {
+                        'risk_score': demo_data.get('risk_score', 0),
+                        'component_scores': {'process': 0, 'network': 0, 'system': 0},
+                        'confidence': 0.5
+                    }
+                    quantification = risk_analyzer.quantify_total_risk(
+                        activity_analysis,
+                        ai_insights=demo_data.get('ai_insights', {})
+                    )
+                    # Always nest under ai_insights
+                    demo_data['ai_insights']['risk_quantification'] = quantification
+                except Exception:
+                    pass  # Continue without quantification if it fails
+                
                 return jsonify(demo_data)
 
             # Handle real file upload
@@ -343,6 +366,23 @@ def create_app(config_name=None):
                         demo_data['ai_insights'] = enhanced_data.get('ai_insights', {})
                     except Exception:
                         demo_data['ai_insights'] = {'error': 'AI analysis unavailable'}
+
+                    # Add risk quantification
+                    try:
+                        risk_analyzer = RiskAnalyzer()
+                        activity_analysis = {
+                            'risk_score': demo_data.get('risk_score', 0),
+                            'component_scores': {'process': 0, 'network': 0, 'system': 0},
+                            'confidence': 0.5
+                        }
+                        quantification = risk_analyzer.quantify_total_risk(
+                            activity_analysis,
+                            ai_insights=demo_data.get('ai_insights', {})
+                        )
+                        # Always nest under ai_insights
+                        demo_data['ai_insights']['risk_quantification'] = quantification
+                    except Exception:
+                        pass  # Continue without quantification if it fails
 
                     return jsonify(demo_data)
 

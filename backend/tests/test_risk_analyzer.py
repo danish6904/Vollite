@@ -224,3 +224,29 @@ class TestRecommendations:
         result = analyzer.analyze_risk({'processes': [proc]}, {}, {})
         assert any('lolbin' in r.lower() or 'living' in r.lower() or 'whitelist' in r.lower()
                     for r in result['recommendations'])
+
+
+class TestRiskQuantification:
+
+    def test_quantification_without_llm(self):
+        analyzer = RiskAnalyzer()
+        activity = analyzer.analyze_risk({}, {}, {})
+        quant = analyzer.quantify_total_risk(activity, {'error': 'AI unavailable'})
+
+        assert quant['activity']['score'] == 0
+        assert quant['llm']['score'] == 0
+        assert quant['final']['score'] == 0
+        assert quant['llm']['available'] is False
+
+    def test_quantification_with_llm_issues(self):
+        analyzer = RiskAnalyzer()
+        activity = analyzer.analyze_risk({}, {}, {})
+        llm = {
+            'summary': 'Threat Level: High. Indicators suggest persistence and command and control beacon activity.'
+        }
+        quant = analyzer.quantify_total_risk(activity, llm)
+
+        assert quant['llm']['available'] is True
+        assert quant['llm']['score'] > 0
+        assert len(quant['llm']['issues']) > 0
+        assert quant['final']['score'] > quant['activity']['score']

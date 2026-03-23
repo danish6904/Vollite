@@ -5,7 +5,7 @@
 import re
 import json
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 from functools import lru_cache
 
 class RiskAnalyzer:
@@ -18,6 +18,34 @@ class RiskAnalyzer:
         self.risk_factors = []
         self.total_score = 0
         self.confidence_level = 0
+        self.activity_weight = 0.80
+        self.llm_weight = 0.20
+        self._component_scores = {'process': 0, 'network': 0, 'system': 0}
+
+        # Weighted issue mapping used for LLM findings quantification.
+        self._llm_issue_weights = {
+            'ransomware': 25,
+            'credential dumping': 22,
+            'data exfiltration': 22,
+            'command and control': 20,
+            'c2': 20,
+            'beacon': 18,
+            'persistence': 18,
+            'lateral movement': 18,
+            'encoded command': 14,
+            'powershell': 12,
+            'suspicious process': 12,
+            'malicious': 12,
+            'network anomaly': 10,
+        }
+
+        self._llm_threat_level_weights = {
+            'critical': 30,
+            'high': 20,
+            'medium': 12,
+            'low': 6,
+            'minimal': 3,
+        }
         
         # Pre-compile regex patterns for better performance
         self._compiled_patterns = {
@@ -67,14 +95,17 @@ class RiskAnalyzer:
         # Analyze different aspects with performance tracking
         process_start = time.time()
         process_score = self._analyze_processes(process_data)
+        self._component_scores['process'] = process_score
         self._analysis_times['process'] = time.time() - process_start
 
         network_start = time.time()
         network_score = self._analyze_network(network_data)
+        self._component_scores['network'] = network_score
         self._analysis_times['network'] = time.time() - network_start
 
         system_start = time.time()
         system_score = self._analyze_system(system_info)
+        self._component_scores['system'] = system_score
         self._analysis_times['system'] = time.time() - system_start
 
         # Calculate weighted total score (adjusted for better medium-risk detection)
@@ -98,6 +129,14 @@ class RiskAnalyzer:
             'risk_score': self.total_score,
             'risk_level': self._get_risk_level(),
             'confidence': self.confidence_level,
+            'component_scores': self._component_scores.copy(),
+            'activity_quantification': self._build_activity_quantification(
+                process_score,
+                network_score,
+                system_score,
+                self.total_score,
+                self.risk_factors,
+            ),
             'breakdown': self._get_score_breakdown(),
             'risk_factors': self.risk_factors,
             'explanation': self._generate_explanation(),
@@ -115,6 +154,208 @@ class RiskAnalyzer:
         self._store_in_cache(cache_key, result)
         
         return result
+
+    def quantify_total_risk(self, activity_analysis: dict, ai_insights: Any = None) -> dict:
+        '''
+        Build an explainable final risk score from:
+        1) deterministic activity analysis from memory dump
+        2) quantified LLM findings extracted from AI insights
+        '''
+        activity_score = int(activity_analysis.get('risk_score', 0) or 0)
+
+        component_scores = activity_analysis.get('component_scores') or {'process': 0, 'network': 0, 'system': 0}
+        activity_quantification = activity_analysis.get('activity_quantification') or self._build_activity_quantification(
+            int(component_scores.get('process', 0) or 0),
+            int(component_scores.get('network', 0) or 0),
+            int(component_scores.get('system', 0) or 0),
+            activity_score,
+            activity_analysis.get('risk_factors', []),
+        )
+
+        llm_quantification = self._quantify_llm_findings(ai_insights)
+        llm_score = llm_quantification['score']
+
+        weighted_activity_points = round(activity_score * self.activity_weight, 2)
+        weighted_llm_points = round(llm_score * self.llm_weight, 2)
+        final_score = min(100, int(round(weighted_activity_points + weighted_llm_points)))
+
+        return {
+            'method': 'weighted_activity_plus_llm_v1',
+            'weights': {
+                'activity_weight': self.activity_weight,
+                'llm_weight': self.llm_weight,
+            },
+            'activity': {
+                'score': activity_score,
+                'level': self._risk_level_for_score(activity_score),
+                'confidence': activity_analysis.get('confidence', 0),
+                'quantification': activity_quantification,
+                'weighted_points': weighted_activity_points,
+            },
+            'llm': {
+                'score': llm_score,
+                'level': self._risk_level_for_score(llm_score),
+                'available': llm_quantification['available'],
+                'issues': llm_quantification['issues'],
+                'weighted_points': weighted_llm_points,
+                'error': llm_quantification.get('error'),
+                'source_excerpt': llm_quantification.get('source_excerpt', ''),
+            },
+            'final': {
+                'score': final_score,
+                'level': self._risk_level_for_score(final_score),
+                'equation': 'final = (activity_score * 0.80) + (llm_score * 0.20)',
+                'activity_points': weighted_activity_points,
+                'llm_points': weighted_llm_points,
+            }
+        }
+
+    def _build_activity_quantification(self,
+                                       process_score: int,
+                                       network_score: int,
+                                       system_score: int,
+                                       activity_score: int,
+                                       risk_factors: List[dict]) -> dict:
+        '''Quantify how memory-dump activities contribute to activity score.'''
+        process_points = round(process_score * 0.70, 2)
+        network_points = round(network_score * 0.20, 2)
+        system_points = round(system_score * 0.10, 2)
+
+        def _pct(points: float, total: int) -> float:
+            if total <= 0:
+                return 0.0
+            return round((points / float(total)) * 100.0, 2)
+
+        top_factors = []
+        for factor in risk_factors[:10]:
+            impact_text = factor.get('impact', '0')
+            try:
+                impact_points = int(str(impact_text).replace('+', '').replace(' points', ''))
+            except ValueError:
+                impact_points = 0
+            top_factors.append({
+                'category': factor.get('category', 'Unknown'),
+                'severity': factor.get('severity', 'Unknown'),
+                'description': factor.get('description', ''),
+                'impact_points': impact_points,
+            })
+
+        return {
+            'component_scores': {
+                'process': process_score,
+                'network': network_score,
+                'system': system_score,
+            },
+            'weighted_points': {
+                'process': process_points,
+                'network': network_points,
+                'system': system_points,
+                'total': round(process_points + network_points + system_points, 2),
+            },
+            'max_points': {
+                'process': 70,
+                'network': 20,
+                'system': 10,
+                'total': 100,
+            },
+            'percent_of_activity_score': {
+                'process': _pct(process_points, activity_score),
+                'network': _pct(network_points, activity_score),
+                'system': _pct(system_points, activity_score),
+            },
+            'indicator_count': len(risk_factors),
+            'top_factors': top_factors,
+        }
+
+    def _quantify_llm_findings(self, ai_insights: Any) -> dict:
+        '''Convert LLM narrative output into a deterministic score and issue list.'''
+        if isinstance(ai_insights, dict) and ai_insights.get('error'):
+            return {
+                'available': False,
+                'score': 0,
+                'issues': [],
+                'error': ai_insights.get('error'),
+                'source_excerpt': '',
+            }
+
+        llm_text = self._extract_llm_text(ai_insights)
+        if not llm_text:
+            return {
+                'available': False,
+                'score': 0,
+                'issues': [],
+                'error': 'No AI findings provided',
+                'source_excerpt': '',
+            }
+
+        llm_text_lower = llm_text.lower()
+        issues = []
+        total_points = 0
+
+        for level, points in self._llm_threat_level_weights.items():
+            marker = f'threat level: {level}'
+            if marker in llm_text_lower:
+                issues.append({
+                    'issue': f'LLM threat level reported as {level.title()}',
+                    'points': points,
+                    'evidence': marker,
+                })
+                total_points += points
+                break
+
+        for phrase, points in self._llm_issue_weights.items():
+            if phrase in llm_text_lower:
+                issues.append({
+                    'issue': f'LLM flagged "{phrase}"',
+                    'points': points,
+                    'evidence': phrase,
+                })
+                total_points += points
+
+        llm_score = min(100, total_points)
+
+        return {
+            'available': True,
+            'score': llm_score,
+            'issues': issues,
+            'error': None,
+            'source_excerpt': llm_text[:500],
+        }
+
+    def _extract_llm_text(self, ai_insights: Any) -> str:
+        '''Extract analyzable plain text from LLM insights payload.'''
+        if not ai_insights:
+            return ''
+
+        if isinstance(ai_insights, str):
+            return ai_insights.strip()
+
+        if isinstance(ai_insights, dict):
+            text_parts = []
+            for key in ('summary', 'analysis', 'details', 'explanation'):
+                value = ai_insights.get(key)
+                if isinstance(value, str) and value.strip():
+                    text_parts.append(value.strip())
+
+            findings = ai_insights.get('findings')
+            if isinstance(findings, list):
+                text_parts.extend(str(item).strip() for item in findings if str(item).strip())
+
+            return '\n'.join(text_parts).strip()
+
+        return str(ai_insights).strip()
+
+    def _risk_level_for_score(self, score: int) -> str:
+        '''Convert numeric score to risk level without mutating analyzer state.'''
+        if score >= 80:
+            return 'Critical'
+        if score >= 60:
+            return 'High'
+        if score >= 40:
+            return 'Medium'
+        if score >= 20:
+            return 'Low'
+        return 'Minimal'
 
     def _analyze_processes(self, process_data: dict) -> int:
         '''Analyze process behavior and return risk score (0-100) - Optimized'''

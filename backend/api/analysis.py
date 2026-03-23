@@ -171,12 +171,13 @@ def start_analysis(session_id):
                 'system_info': simulated_system_info
             }
             risk_analysis = risk_analyzer.analyze_risk(simulated_data, simulated_data, simulated_system_info)
+            risk_quantification = risk_analyzer.quantify_total_risk(risk_analysis, {})
             
             # Create analysis result (simulated) with enhanced risk score
             result = AnalysisResult(
                 session_id=session.id,
                 summary=f"Simulated analysis for {session.original_filename}",
-                risk_score=risk_analysis['risk_score']  # Enhanced risk score
+                risk_score=risk_quantification['final']['score']
             )
             result.system_info = simulated_system_info
             result.process_data = simulated_processes
@@ -206,6 +207,13 @@ def start_analysis(session_id):
                 current_app.logger.warning(f"RAG analysis failed: {e}")
                 result.ai_insights = {'error': 'AI analysis unavailable'}
 
+            risk_quantification = risk_analyzer.quantify_total_risk(risk_analysis, result.ai_insights)
+            result.risk_score = risk_quantification['final']['score']
+            if isinstance(result.ai_insights, dict):
+                result.ai_insights['risk_quantification'] = risk_quantification
+            else:
+                result.ai_insights = {'summary': str(result.ai_insights), 'risk_quantification': risk_quantification}
+
             db.session.add(result)
 
             # Add informational alert
@@ -234,7 +242,9 @@ def start_analysis(session_id):
                     'processes_found': 0,
                     'network_connections': 0,
                     'alerts_generated': 1,
-                    'risk_score': result.risk_score
+                    'risk_score': result.risk_score,
+                    'activity_risk_score': risk_quantification['activity']['score'],
+                    'llm_risk_score': risk_quantification['llm']['score']
                 }
             }), 200
 
@@ -279,12 +289,13 @@ def start_analysis(session_id):
             # Use RiskAnalyzer for enhanced risk scoring
             risk_analyzer = RiskAnalyzer()
             risk_analysis = risk_analyzer.analyze_risk(process_data, network_data, system_info)
+            risk_quantification = risk_analyzer.quantify_total_risk(risk_analysis, {})
             
             # Create analysis result with enhanced risk score
             result = AnalysisResult(
                 session_id=session.id,
                 summary=f"Analysis completed for {session.original_filename}",
-                risk_score=risk_analysis['risk_score']  # Enhanced risk score
+                risk_score=risk_quantification['final']['score']
             )
             
             # Store the analysis data
@@ -346,6 +357,13 @@ def start_analysis(session_id):
                 current_app.logger.warning(f"RAG analysis failed: {e}")
                 result.ai_insights = {'error': 'AI analysis unavailable'}
 
+            risk_quantification = risk_analyzer.quantify_total_risk(risk_analysis, result.ai_insights)
+            result.risk_score = risk_quantification['final']['score']
+            if isinstance(result.ai_insights, dict):
+                result.ai_insights['risk_quantification'] = risk_quantification
+            else:
+                result.ai_insights = {'summary': str(result.ai_insights), 'risk_quantification': risk_quantification}
+
             db.session.add(result)
 
             # Save alerts
@@ -367,7 +385,9 @@ def start_analysis(session_id):
                     'processes_found': len(analysis_results.get('processes', [])),
                     'network_connections': len(analysis_results.get('network', [])),
                     'alerts_generated': len(alerts),
-                    'risk_score': result.risk_score
+                    'risk_score': result.risk_score,
+                    'activity_risk_score': risk_quantification['activity']['score'],
+                    'llm_risk_score': risk_quantification['llm']['score']
                 }
             }), 200
 

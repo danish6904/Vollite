@@ -1,23 +1,91 @@
 // Helpers
-function setRisk(value) {
+function setRisk(value, activityScore = null, llmScore = null) {
   value = Math.max(0, Math.min(100, value | 0));
   const ring = document.getElementById("riskMeter");
   const valEl = document.getElementById("riskValue");
-  valEl.textContent = value + "%";
+  ring.querySelectorAll(".ring-label").forEach(el => el.remove());
 
-  // color stops: 0-50 green, 50-80 yellow, 80-100 red
-  const greenStop = Math.min(value, 50) / 100 * 100;
-  const yellowStop = value <= 50 ? 0 : Math.min(value - 50, 30) / 30 * 100;
-  const redStop = value <= 80 ? 0 : (value - 80) / 20 * 100;
+  // If contributions are provided, show segmented breakdown
+  if (activityScore !== null && llmScore !== null) {
+    const rawActivity = Math.max(0, Number(activityScore || 0) * 0.80);
+    const rawLlm = Math.max(0, Number(llmScore || 0) * 0.20);
+    const rawTotal = rawActivity + rawLlm;
 
-  // Build conic gradient such that the filled angle matches value
-  // Simple approach: base is gray, then overlay a single hue from 0 to value
-  // But we want smooth green->yellow->red. We'll interpolate stops.
-  let color;
-  if (value < 50) color = "var(--ok)";
-  else if (value < 80) color = "var(--warn)";
-  else color = "var(--danger)";
-  ring.style.background = `conic-gradient(${color} ${value * 3.6}deg, #1a2032 0deg)`;
+    // Normalize so components add up to the displayed total risk percentage.
+    let activityContrib = 0;
+    let llmContrib = 0;
+    if (rawTotal > 0) {
+      const scale = value / rawTotal;
+      activityContrib = Math.round((rawActivity * scale) * 10) / 10;
+      llmContrib = Math.round((value - activityContrib) * 10) / 10;
+    }
+
+    // Calculate total contribution and angles
+    const totalContrib = activityContrib + llmContrib;
+    const totalFillDeg = value * 3.6; // Total degrees to fill
+
+    // Proportional angles for each contribution
+    const activityDegreesRelative = totalContrib > 0 ? (activityContrib / totalContrib) * totalFillDeg : 0;
+    const llmDegreesRelative = totalContrib > 0 ? (llmContrib / totalContrib) * totalFillDeg : 0;
+
+    // Determine colors based on risk level
+    let activityColor, llmColor;
+    if (value < 50) {
+      activityColor = "var(--ok)";      // Green
+      llmColor = "var(--ok-dim)";       // Lighter green
+    } else if (value < 80) {
+      activityColor = "var(--warn)";    // Yellow
+      llmColor = "var(--warn-dim)";     // Lighter yellow
+    } else {
+      activityColor = "var(--danger)";  // Red
+      llmColor = "var(--danger-dim)";   // Lighter red
+    }
+
+    // Create segmented conic gradient
+    const point1 = activityDegreesRelative;
+    const point2 = activityDegreesRelative + llmDegreesRelative;
+    ring.style.background = `conic-gradient(
+      ${activityColor} 0deg,
+      ${activityColor} ${point1}deg,
+      ${llmColor} ${point1}deg,
+      ${llmColor} ${point2}deg,
+      #1a2032 ${point2}deg,
+      #1a2032 360deg
+    )`;
+
+    const placeLabel = (text, color, angleDeg) => {
+      const label = document.createElement("div");
+      label.className = "ring-label";
+      label.innerHTML = `<span class="ring-label-swatch" style="background:${color}"></span>${text}`;
+
+      const radius = 102;
+      const radians = (angleDeg - 90) * (Math.PI / 180);
+      const x = 80 + (Math.cos(radians) * radius);
+      const y = 80 + (Math.sin(radians) * radius);
+      const rightSide = Math.cos(radians) >= 0;
+
+      label.style.left = `${x}px`;
+      label.style.top = `${y}px`;
+      label.style.transform = rightSide ? "translate(8px, -50%)" : "translate(calc(-100% - 8px), -50%)";
+      ring.appendChild(label);
+    };
+
+    const activityMid = point1 / 2;
+    const llmMid = point1 + (llmDegreesRelative / 2);
+    placeLabel(`Activity ${activityContrib}%`, activityColor, activityMid);
+    placeLabel(`LLM ${llmContrib}%`, llmColor, llmMid);
+
+    // Center keeps only the final score for clarity.
+    valEl.textContent = value + "%";
+  } else {
+    // Default single-color gradient
+    let color;
+    if (value < 50) color = "var(--ok)";
+    else if (value < 80) color = "var(--warn)";
+    else color = "var(--danger)";
+    ring.style.background = `conic-gradient(${color} ${value * 3.6}deg, #1a2032 0deg)`;
+    valEl.textContent = value + "%";
+  }
 }
 
 function makeTree(container, node) {
@@ -164,6 +232,118 @@ async function pollJob(jobId) {
   throw new Error("Analysis timed out");
 }
 
+function renderQuantificationInSections(data) {
+  const aiLlmBlock = document.getElementById("aiLlmFindingsBlock");
+  const processActivityBlock = document.getElementById("processActivityBlock");
+  const summaryIssuesBlock = document.getElementById("summaryIssuesBlock");
+  if (!aiLlmBlock || !processActivityBlock || !summaryIssuesBlock) return;
+
+  // Support all payload shapes seen across sync/async paths.
+  let quantData =
+    data?.ai_insights?.risk_quantification ||
+    data?.risk_quantification ||
+    null;
+
+  // Fallback: build a minimal quantification model from exposed score fields.
+  if (!quantData && (typeof data?.activity_risk_score === "number" || typeof data?.llm_risk_score === "number")) {
+    const activityScore = Number(data?.activity_risk_score || 0);
+    const llmScore = Number(data?.llm_risk_score || 0);
+    const finalScore = Number(data?.risk_score || Math.round((activityScore * 0.8) + (llmScore * 0.2)));
+    quantData = {
+      final: {
+        score: finalScore,
+        equation: "final = (activity_score * 0.80) + (llm_score * 0.20)",
+      },
+      activity: {
+        score: activityScore,
+        quantification: {
+          percent_of_activity_score: { process: 0, network: 0, system: 0 },
+        },
+      },
+      llm: {
+        score: llmScore,
+        issues: [],
+      },
+    };
+  }
+
+  // Check if risk_quantification data exists
+  if (!quantData || !quantData.final) {
+    aiLlmBlock.style.display = "none";
+    processActivityBlock.style.display = "none";
+    summaryIssuesBlock.style.display = "none";
+    return;
+  }
+
+  // Activity contribution
+  if (quantData.activity) {
+    processActivityBlock.style.display = "";
+    const actScore = quantData.activity.score || 0;
+    const actPercent = Math.round((actScore * 0.80) * 100) / 100;
+    document.getElementById("processActivityScore").textContent =
+      actScore + "% (contributes " + actPercent + " pts)";
+
+    // Activity breakdown by component
+    if (quantData.activity.quantification && quantData.activity.quantification.percent_of_activity_score) {
+      const percents = quantData.activity.quantification.percent_of_activity_score;
+      document.getElementById("processActivityProcess").textContent =
+        (percents.process || 0).toFixed(1) + "%";
+      document.getElementById("processActivityNetwork").textContent =
+        (percents.network || 0).toFixed(1) + "%";
+      document.getElementById("processActivitySystem").textContent =
+        (percents.system || 0).toFixed(1) + "%";
+    }
+  } else {
+    processActivityBlock.style.display = "none";
+  }
+
+  // LLM contribution in AI Insights box
+  if (quantData.llm) {
+    aiLlmBlock.style.display = "";
+    const llmScore = quantData.llm.score || 0;
+    const llmPercent = Math.round((llmScore * 0.20) * 100) / 100;
+    document.getElementById("aiLlmContributionScore").textContent =
+      llmScore + "% (contributes " + llmPercent + " pts)";
+
+    const aiFindingsList = document.getElementById("aiLlmFindingsList");
+    aiFindingsList.innerHTML = "";
+    const summaryIssuesList = document.getElementById("summaryTopIssuesList");
+    summaryIssuesList.innerHTML = "";
+
+    if (quantData.llm.issues && quantData.llm.issues.length > 0) {
+      summaryIssuesBlock.style.display = "";
+      quantData.llm.issues.forEach((issue) => {
+        const aiIssueDiv = document.createElement("div");
+        aiIssueDiv.style.cssText =
+          "background: #0a0d17; padding: 10px 12px; border-radius: 8px; " +
+          "border-left: 3px solid #6ea8fe; font-size: 0.9rem;";
+        aiIssueDiv.innerHTML = `
+          <div><strong>${issue.issue}</strong></div>
+          <div style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">
+            +${issue.points} points
+          </div>
+        `;
+        aiFindingsList.appendChild(aiIssueDiv);
+
+        const summaryIssueDiv = document.createElement("div");
+        summaryIssueDiv.style.cssText =
+          "background:#0a0d17; padding:8px 10px; border-radius:8px; border-left:3px solid #8ef0a5; font-size:0.9rem;";
+        summaryIssueDiv.innerHTML = `<strong>${issue.issue}</strong> <span style="color:var(--muted);">(+${issue.points})</span>`;
+        summaryIssuesList.appendChild(summaryIssueDiv);
+      });
+    } else {
+      summaryIssuesBlock.style.display = "none";
+      const noFindingsDiv = document.createElement("div");
+      noFindingsDiv.style.color = "var(--muted)";
+      noFindingsDiv.textContent = "No issues detected by LLM analysis";
+      aiFindingsList.appendChild(noFindingsDiv);
+    }
+  } else {
+    aiLlmBlock.style.display = "none";
+    summaryIssuesBlock.style.display = "none";
+  }
+}
+
 async function analyze(formDataOrSimulate) {
   // Show immediate feedback
   document.getElementById("summaryText").textContent = "Starting analysis\u2026";
@@ -195,8 +375,15 @@ async function analyze(formDataOrSimulate) {
     ul.appendChild(li);
   });
 
-  // Risk
-  setRisk(data.risk_score || 0);
+  // Risk - pass activity and LLM scores if available for breakdown display
+  let actScore = null, llmScore = null;
+  if (data?.ai_insights?.risk_quantification?.activity?.score !== undefined) {
+    actScore = data.ai_insights.risk_quantification.activity.score;
+  }
+  if (data?.ai_insights?.risk_quantification?.llm?.score !== undefined) {
+    llmScore = data.ai_insights.risk_quantification.llm.score;
+  }
+  setRisk(data.risk_score || 0, actScore, llmScore);
 
   // Tree
   makeTree(document.getElementById("processTree"), data.process_tree || { name: "No data", children: [] });
@@ -232,6 +419,9 @@ async function analyze(formDataOrSimulate) {
 
   // AI Insights (RAG)
   renderAiInsights(data.ai_insights || {});
+
+  // Quantification details merged into existing sections
+  renderQuantificationInSections(data || {});
 
   // Store latest for export
   window.__LATEST_RESULT__ = data;

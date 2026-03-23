@@ -152,6 +152,7 @@ def run_analysis_job(original_filename: str, file_info: dict,
     Background job: run analysis + RAG enrichment.
     """
     from services.rag_service import get_rag_service
+    from services.risk_analyzer import RiskAnalyzer
     from utils.tree_builder import build_process_tree
 
     start = datetime.now()
@@ -183,6 +184,27 @@ def run_analysis_job(original_filename: str, file_info: dict,
     except Exception:
         demo_data['ai_insights'] = {'error': 'AI analysis unavailable'}
 
+    # Ensure ai_insights is always a dict
+    if not isinstance(demo_data.get('ai_insights'), dict):
+        demo_data['ai_insights'] = {}
+
+    # Add transparent risk quantification for async job payloads.
+    analyzer = RiskAnalyzer()
+    activity_analysis = {
+        'risk_score': risk_score,
+        'confidence': 75,
+        'component_scores': {
+            'process': risk_score,
+            'network': risk_score,
+            'system': risk_score,
+        },
+    }
+    risk_quantification = analyzer.quantify_total_risk(activity_analysis, demo_data.get('ai_insights', {}))
+    # Nest under ai_insights where frontend expects it
+    demo_data['ai_insights']['risk_quantification'] = risk_quantification
+    demo_data['activity_risk_score'] = risk_quantification['activity']['score']
+    demo_data['llm_risk_score'] = risk_quantification['llm']['score']
+
     duration = (datetime.now() - start).total_seconds()
     demo_data['analysis_duration'] = round(duration, 2)
     return demo_data
@@ -194,6 +216,7 @@ def run_simulate_job() -> Dict[str, Any]:
     """
     import random
     from services.rag_service import get_rag_service
+    from services.risk_analyzer import RiskAnalyzer
     from utils.tree_builder import build_process_tree
     from app import get_demo_scenarios
 
@@ -225,6 +248,27 @@ def run_simulate_job() -> Dict[str, Any]:
         demo_data['ai_insights'] = enhanced.get('ai_insights', {})
     except Exception:
         demo_data['ai_insights'] = {'error': 'AI analysis unavailable'}
+
+    # Ensure ai_insights is always a dict
+    if not isinstance(demo_data.get('ai_insights'), dict):
+        demo_data['ai_insights'] = {}
+
+    # Add transparent risk quantification for async simulated job payloads.
+    analyzer = RiskAnalyzer()
+    activity_analysis = {
+        'risk_score': risk_score,
+        'confidence': 75,
+        'component_scores': {
+            'process': risk_score,
+            'network': risk_score,
+            'system': risk_score,
+        },
+    }
+    risk_quantification = analyzer.quantify_total_risk(activity_analysis, demo_data.get('ai_insights', {}))
+    # Nest under ai_insights where frontend expects it
+    demo_data['ai_insights']['risk_quantification'] = risk_quantification
+    demo_data['activity_risk_score'] = risk_quantification['activity']['score']
+    demo_data['llm_risk_score'] = risk_quantification['llm']['score']
 
     duration = (datetime.now() - start).total_seconds()
     demo_data['analysis_duration'] = round(duration, 2)

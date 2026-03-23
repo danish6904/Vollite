@@ -184,6 +184,9 @@ class TestJobFunctions:
                 assert 'risk_score' in result
                 assert 'process_tree' in result
                 assert result['ai_insights']['summary'] == 'test insight'
+                assert 'risk_quantification' in result
+                assert 'activity_risk_score' in result
+                assert 'llm_risk_score' in result
 
     def test_run_analysis_job(self, app):
         """run_analysis_job returns complete analysis data"""
@@ -214,6 +217,9 @@ class TestJobFunctions:
                 assert result['risk_score'] == 42
                 assert 'test.dmp' in result['summary']
                 assert result['ai_insights']['summary'] == 'analyzed'
+                assert 'risk_quantification' in result
+                assert 'activity_risk_score' in result
+                assert 'llm_risk_score' in result
 
     def test_run_analysis_job_rag_failure(self, app):
         """Job still completes even when RAG fails"""
@@ -232,3 +238,6 @@ class TestJobFunctions:
                 )
                 assert result['status'] == 'completed'
                 assert result['ai_insights']['error'] == 'AI analysis unavailable'
+                assert 'risk_quantification' in result
+                assert 'activity_risk_score' in result
+                assert 'llm_risk_score' in result

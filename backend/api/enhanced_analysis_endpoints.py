@@ -35,12 +35,14 @@ def get_detailed_analysis(session_id):
             network_data=result.network_data or {},
             system_info=result.system_info or {}
         )
+        risk_quantification = analyzer.quantify_total_risk(detailed_analysis, result.ai_insights or {})
 
         return jsonify({
             'session_id': session_id,
             'analysis_status': session.analysis_status,
             'original_risk_score': result.risk_score,
             'detailed_analysis': detailed_analysis,
+            'risk_quantification': risk_quantification,
             'generated_at': datetime.utcnow().isoformat()
         })
 
@@ -64,13 +66,17 @@ def explain_risk_score(session_id):
             network_data=result.network_data or {},
             system_info=result.system_info or {}
         )
+        risk_quantification = analyzer.quantify_total_risk(analysis, result.ai_insights or {})
 
         return jsonify({
-            'risk_score': analysis['risk_score'],
-            'risk_level': analysis['risk_level'], 
+            'risk_score': risk_quantification['final']['score'],
+            'risk_level': risk_quantification['final']['level'],
+            'activity_risk_score': risk_quantification['activity']['score'],
+            'llm_risk_score': risk_quantification['llm']['score'],
             'confidence': analysis['confidence'],
             'explanation': analysis['explanation'],
             'breakdown': analysis['breakdown'],
+            'risk_quantification': risk_quantification,
             'recommendations': analysis['recommendations'],
             'factor_count': len(analysis['risk_factors'])
         })
