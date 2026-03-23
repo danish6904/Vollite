@@ -33,7 +33,7 @@ It now features **RAG-based AI Analysis**, allowing the system to use local fore
 
 - Python 3.8 or higher
 - Git
-- (Optional) Redis for background jobs
+- (Optional) Redis for background agens
 - (Optional) Groq API key for AI features
 
 ### Installation
