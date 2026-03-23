@@ -148,6 +148,16 @@ vollite-frontend/
 - ✅ Full Volatility integration
 - ✅ AI-based threat detection (RAG Integrated)
 
+## 🔜 Coming Next: Step 5 — Docker Containerization
+
+The next planned update is full Docker support, so the app can be run consistently across any machine with a single command:
+
+```bash
+docker compose up
+```
+
+This will include a `Dockerfile` for the Flask backend, a `docker-compose.yml` to orchestrate the app and its volumes, and separate environment profiles (`.env.local` for development, `.env.prod` for production). Once complete, the entire setup — dependencies, database, and configuration — will be handled automatically inside the container.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
