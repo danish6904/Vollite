@@ -1,79 +1,193 @@
 // Helpers
-function setRisk(value, activityScore = null, llmScore = null) {
+function computeRiskContributions(finalScore, activityScore, llmScore) {
+  const value = Math.max(0, Math.min(100, Number(finalScore || 0)));
+  const rawActivity = Math.max(0, Number(activityScore || 0) * 0.80);
+  const rawLlm = Math.max(0, Number(llmScore || 0) * 0.20);
+  const rawTotal = rawActivity + rawLlm;
+
+  let activityContrib = 0;
+  let llmContrib = 0;
+  if (rawTotal > 0) {
+    const scale = value / rawTotal;
+    activityContrib = Math.round((rawActivity * scale) * 10) / 10;
+    llmContrib = Math.round((value - activityContrib) * 10) / 10;
+  }
+
+  return {
+    activityContrib,
+    llmContrib,
+  };
+}
+
+function setRisk(value, activityScore = null, llmScore = null, quantData = null) {
   value = Math.max(0, Math.min(100, value | 0));
   const ring = document.getElementById("riskMeter");
   const valEl = document.getElementById("riskValue");
-  ring.querySelectorAll(".ring-label").forEach(el => el.remove());
+  let legendEl = document.getElementById("riskLegend");
+  if (!legendEl && ring) {
+    const visual = ring.closest(".risk-visual") || ring.parentElement;
+    if (visual) {
+      legendEl = document.createElement("div");
+      legendEl.id = "riskLegend";
+      legendEl.className = "risk-legend";
+      visual.appendChild(legendEl);
+    }
+  }
+  if (legendEl) legendEl.innerHTML = "";
 
   // If contributions are provided, show segmented breakdown
   if (activityScore !== null && llmScore !== null) {
-    const rawActivity = Math.max(0, Number(activityScore || 0) * 0.80);
-    const rawLlm = Math.max(0, Number(llmScore || 0) * 0.20);
-    const rawTotal = rawActivity + rawLlm;
-
-    // Normalize so components add up to the displayed total risk percentage.
-    let activityContrib = 0;
-    let llmContrib = 0;
-    if (rawTotal > 0) {
-      const scale = value / rawTotal;
-      activityContrib = Math.round((rawActivity * scale) * 10) / 10;
-      llmContrib = Math.round((value - activityContrib) * 10) / 10;
-    }
+    const contribution = computeRiskContributions(value, activityScore, llmScore);
+    const activityContrib = contribution.activityContrib;
+    const llmContrib = contribution.llmContrib;
 
     // Calculate total contribution and angles
     const totalContrib = activityContrib + llmContrib;
     const totalFillDeg = value * 3.6; // Total degrees to fill
 
-    // Proportional angles for each contribution
-    const activityDegreesRelative = totalContrib > 0 ? (activityContrib / totalContrib) * totalFillDeg : 0;
-    const llmDegreesRelative = totalContrib > 0 ? (llmContrib / totalContrib) * totalFillDeg : 0;
-
-    // Determine colors based on risk level
-    let activityColor, llmColor;
+    // Enhanced color palettes with more differential colors
+    let activityColors, llmColors;
     if (value < 50) {
-      activityColor = "var(--ok)";      // Green
-      llmColor = "var(--ok-dim)";       // Lighter green
+      // Green palette with distinct hues for Activity components
+      activityColors = {
+        process: "#06D6A0",      // Bright teal
+        network: "#00A878",      // Medium teal  
+        system: "#2F9B7C"        // Darker teal
+      };
+      // Blue-green gradient for LLM issues
+      llmColors = ["#5CC8E2", "#3BA39C", "#00B4A6", "#008B7C"];
     } else if (value < 80) {
-      activityColor = "var(--warn)";    // Yellow
-      llmColor = "var(--warn-dim)";     // Lighter yellow
+      // Amber palette with distinct hues for Activity components
+      activityColors = {
+        process: "#FFD166",      // Bright amber
+        network: "#F4A261",      // Medium amber
+        system: "#E8860F"        // Darker gold
+      };
+      // Orange-amber gradient for LLM issues
+      llmColors = ["#FF9F1C", "#F77F00", "#E89D00", "#D87F00"];
     } else {
-      activityColor = "var(--danger)";  // Red
-      llmColor = "var(--danger-dim)";   // Lighter red
+      // Red palette with distinct hues for Activity components
+      activityColors = {
+        process: "#FF6B6B",      // Bright red
+        network: "#E63946",      // Medium red
+        system: "#C1121F"        // Dark crimson
+      };
+      // Red-orange gradient for LLM issues
+      llmColors = ["#FF7F50", "#FF6347", "#E53935", "#C62828"];
     }
 
-    // Create segmented conic gradient
-    const point1 = activityDegreesRelative;
-    const point2 = activityDegreesRelative + llmDegreesRelative;
-    ring.style.background = `conic-gradient(
-      ${activityColor} 0deg,
-      ${activityColor} ${point1}deg,
-      ${llmColor} ${point1}deg,
-      ${llmColor} ${point2}deg,
-      #1a2032 ${point2}deg,
-      #1a2032 360deg
-    )`;
+    const segments = [];
 
-    const placeLabel = (text, color, angleDeg) => {
-      const label = document.createElement("div");
-      label.className = "ring-label";
-      label.innerHTML = `<span class="ring-label-swatch" style="background:${color}"></span>${text}`;
+    // Build activity subsegments (process/network/system) as parts of total risk.
+    const activityPerc = quantData?.activity?.quantification?.percent_of_activity_score;
+    if (activityContrib > 0 && activityPerc) {
+      const processVal = (activityContrib * Number(activityPerc.process || 0)) / 100;
+      const networkVal = (activityContrib * Number(activityPerc.network || 0)) / 100;
+      const systemVal = (activityContrib * Number(activityPerc.system || 0)) / 100;
+      
+      segments.push({
+        value: processVal,
+        color: activityColors.process,
+        name: "Process",
+        contribution: processVal,
+        category: "Activity"
+      });
+      segments.push({
+        value: networkVal,
+        color: activityColors.network,
+        name: "Network",
+        contribution: networkVal,
+        category: "Activity"
+      });
+      segments.push({
+        value: systemVal,
+        color: activityColors.system,
+        name: "System",
+        contribution: systemVal,
+        category: "Activity"
+      });
+    } else if (activityContrib > 0) {
+      segments.push({ 
+        value: activityContrib, 
+        color: activityColors.process,
+        name: "Activity",
+        contribution: activityContrib,
+        category: "Activity"
+      });
+    }
 
-      const radius = 102;
-      const radians = (angleDeg - 90) * (Math.PI / 180);
-      const x = 80 + (Math.cos(radians) * radius);
-      const y = 80 + (Math.sin(radians) * radius);
-      const rightSide = Math.cos(radians) >= 0;
+    // Build LLM subsegments from issue points as parts of total risk.
+    const issues = Array.isArray(quantData?.llm?.issues) ? quantData.llm.issues : [];
+    const totalIssuePoints = issues.reduce((sum, issue) => sum + Number(issue.points || 0), 0);
+    if (llmContrib > 0 && issues.length > 0 && totalIssuePoints > 0) {
+      issues.forEach((issue, idx) => {
+        const share = Number(issue.points || 0) / totalIssuePoints;
+        const issueContrib = llmContrib * share;
+        segments.push({
+          value: issueContrib,
+          color: llmColors[idx % llmColors.length],
+          name: (issue.name || issue.title || `Issue ${idx + 1}`).substring(0, 20),
+          contribution: issueContrib,
+          category: "LLM"
+        });
+      });
+    } else if (llmContrib > 0) {
+      segments.push({ 
+        value: llmContrib, 
+        color: llmColors[0],
+        name: "LLM",
+        contribution: llmContrib,
+        category: "LLM"
+      });
+    }
 
-      label.style.left = `${x}px`;
-      label.style.top = `${y}px`;
-      label.style.transform = rightSide ? "translate(8px, -50%)" : "translate(calc(-100% - 8px), -50%)";
-      ring.appendChild(label);
-    };
+    // Create multi-segment conic gradient from subcategory segments.
+    let cursorDeg = 0;
+    const stops = [];
+    segments.forEach((seg) => {
+      if (seg.value <= 0) return;
+      const segDeg = totalContrib > 0 ? (seg.value / totalContrib) * totalFillDeg : 0;
+      const endDeg = cursorDeg + segDeg;
+      stops.push(`${seg.color} ${cursorDeg}deg`, `${seg.color} ${endDeg}deg`);
+      cursorDeg = endDeg;
+    });
+    ring.style.background = `conic-gradient(${stops.join(", ")}, #1a2032 ${cursorDeg}deg, #1a2032 360deg)`;
 
-    const activityMid = point1 / 2;
-    const llmMid = point1 + (llmDegreesRelative / 2);
-    placeLabel(`Activity ${activityContrib}%`, activityColor, activityMid);
-    placeLabel(`LLM ${llmContrib}%`, llmColor, llmMid);
+    // Render side legend with matching segment colors and contribution percentages.
+    if (legendEl) {
+      segments
+        .filter(seg => seg.value > 0)
+        .forEach((seg) => {
+          const contribPercent = totalContrib > 0
+            ? ((seg.value / totalContrib) * 100).toFixed(1)
+            : "0.0";
+
+          const item = document.createElement("div");
+          item.className = "risk-legend-item";
+
+          const left = document.createElement("span");
+          left.className = "risk-legend-left";
+
+          const dot = document.createElement("span");
+          dot.className = "risk-legend-dot";
+          dot.style.background = seg.color;
+
+          const name = document.createElement("span");
+          name.className = "risk-legend-name";
+          name.title = seg.name;
+          name.textContent = seg.name;
+
+          const pct = document.createElement("span");
+          pct.className = "risk-legend-value";
+          pct.textContent = `${contribPercent}%`;
+
+          left.appendChild(dot);
+          left.appendChild(name);
+          item.appendChild(left);
+          item.appendChild(pct);
+          legendEl.appendChild(item);
+        });
+    }
 
     // Center keeps only the final score for clarity.
     valEl.textContent = value + "%";
@@ -84,6 +198,33 @@ function setRisk(value, activityScore = null, llmScore = null) {
     else if (value < 80) color = "var(--warn)";
     else color = "var(--danger)";
     ring.style.background = `conic-gradient(${color} ${value * 3.6}deg, #1a2032 0deg)`;
+
+    if (legendEl) {
+      const item = document.createElement("div");
+      item.className = "risk-legend-item";
+
+      const left = document.createElement("span");
+      left.className = "risk-legend-left";
+
+      const dot = document.createElement("span");
+      dot.className = "risk-legend-dot";
+      dot.style.background = color;
+
+      const name = document.createElement("span");
+      name.className = "risk-legend-name";
+      name.textContent = "Overall Risk";
+
+      const pct = document.createElement("span");
+      pct.className = "risk-legend-value";
+      pct.textContent = `${value}%`;
+
+      left.appendChild(dot);
+      left.appendChild(name);
+      item.appendChild(left);
+      item.appendChild(pct);
+      legendEl.appendChild(item);
+    }
+
     valEl.textContent = value + "%";
   }
 }
@@ -275,23 +416,35 @@ function renderQuantificationInSections(data) {
     return;
   }
 
+  const finalScore = Number(quantData.final?.score || data?.risk_score || 0);
+  const activityScoreForRisk = Number(quantData.activity?.score || 0);
+  const llmScoreForRisk = Number(quantData.llm?.score || 0);
+  const contribution = computeRiskContributions(finalScore, activityScoreForRisk, llmScoreForRisk);
+
   // Activity contribution
   if (quantData.activity) {
     processActivityBlock.style.display = "";
     const actScore = quantData.activity.score || 0;
-    const actPercent = Math.round((actScore * 0.80) * 100) / 100;
+    const actPercent = contribution.activityContrib;
     document.getElementById("processActivityScore").textContent =
-      actScore + "% (contributes " + actPercent + " pts)";
+      actScore + "% activity score -> " + actPercent.toFixed(1) + "% of total risk";
 
-    // Activity breakdown by component
+    // Activity subcategories as percentage of total risk
     if (quantData.activity.quantification && quantData.activity.quantification.percent_of_activity_score) {
       const percents = quantData.activity.quantification.percent_of_activity_score;
+      const processRiskPct = (actPercent * Number(percents.process || 0)) / 100;
+      const networkRiskPct = (actPercent * Number(percents.network || 0)) / 100;
+      const systemRiskPct = (actPercent * Number(percents.system || 0)) / 100;
       document.getElementById("processActivityProcess").textContent =
-        (percents.process || 0).toFixed(1) + "%";
+        processRiskPct.toFixed(1) + "%";
       document.getElementById("processActivityNetwork").textContent =
-        (percents.network || 0).toFixed(1) + "%";
+        networkRiskPct.toFixed(1) + "%";
       document.getElementById("processActivitySystem").textContent =
-        (percents.system || 0).toFixed(1) + "%";
+        systemRiskPct.toFixed(1) + "%";
+    } else {
+      document.getElementById("processActivityProcess").textContent = "0.0%";
+      document.getElementById("processActivityNetwork").textContent = "0.0%";
+      document.getElementById("processActivitySystem").textContent = "0.0%";
     }
   } else {
     processActivityBlock.style.display = "none";
@@ -301,9 +454,9 @@ function renderQuantificationInSections(data) {
   if (quantData.llm) {
     aiLlmBlock.style.display = "";
     const llmScore = quantData.llm.score || 0;
-    const llmPercent = Math.round((llmScore * 0.20) * 100) / 100;
+    const llmPercent = contribution.llmContrib;
     document.getElementById("aiLlmContributionScore").textContent =
-      llmScore + "% (contributes " + llmPercent + " pts)";
+      llmScore + "% LLM score -> " + llmPercent.toFixed(1) + "% of total risk";
 
     const aiFindingsList = document.getElementById("aiLlmFindingsList");
     aiFindingsList.innerHTML = "";
@@ -312,7 +465,11 @@ function renderQuantificationInSections(data) {
 
     if (quantData.llm.issues && quantData.llm.issues.length > 0) {
       summaryIssuesBlock.style.display = "";
+      const totalIssuePoints = quantData.llm.issues.reduce((sum, issue) => sum + Number(issue.points || 0), 0);
       quantData.llm.issues.forEach((issue) => {
+        const issueRiskPct = totalIssuePoints > 0
+          ? (llmPercent * Number(issue.points || 0)) / totalIssuePoints
+          : 0;
         const aiIssueDiv = document.createElement("div");
         aiIssueDiv.style.cssText =
           "background: #0a0d17; padding: 10px 12px; border-radius: 8px; " +
@@ -320,7 +477,7 @@ function renderQuantificationInSections(data) {
         aiIssueDiv.innerHTML = `
           <div><strong>${issue.issue}</strong></div>
           <div style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">
-            +${issue.points} points
+            ${issueRiskPct.toFixed(1)}% of total risk
           </div>
         `;
         aiFindingsList.appendChild(aiIssueDiv);
@@ -328,7 +485,7 @@ function renderQuantificationInSections(data) {
         const summaryIssueDiv = document.createElement("div");
         summaryIssueDiv.style.cssText =
           "background:#0a0d17; padding:8px 10px; border-radius:8px; border-left:3px solid #8ef0a5; font-size:0.9rem;";
-        summaryIssueDiv.innerHTML = `<strong>${issue.issue}</strong> <span style="color:var(--muted);">(+${issue.points})</span>`;
+        summaryIssueDiv.innerHTML = `<strong>${issue.issue}</strong> <span style="color:var(--muted);">(${issueRiskPct.toFixed(1)}%)</span>`;
         summaryIssuesList.appendChild(summaryIssueDiv);
       });
     } else {
@@ -376,14 +533,15 @@ async function analyze(formDataOrSimulate) {
   });
 
   // Risk - pass activity and LLM scores if available for breakdown display
+  const quantData = data?.ai_insights?.risk_quantification || data?.risk_quantification || null;
   let actScore = null, llmScore = null;
-  if (data?.ai_insights?.risk_quantification?.activity?.score !== undefined) {
-    actScore = data.ai_insights.risk_quantification.activity.score;
+  if (quantData?.activity?.score !== undefined) {
+    actScore = quantData.activity.score;
   }
-  if (data?.ai_insights?.risk_quantification?.llm?.score !== undefined) {
-    llmScore = data.ai_insights.risk_quantification.llm.score;
+  if (quantData?.llm?.score !== undefined) {
+    llmScore = quantData.llm.score;
   }
-  setRisk(data.risk_score || 0, actScore, llmScore);
+  setRisk(data.risk_score || 0, actScore, llmScore, quantData);
 
   // Tree
   makeTree(document.getElementById("processTree"), data.process_tree || { name: "No data", children: [] });
