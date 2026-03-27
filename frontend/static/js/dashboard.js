@@ -84,7 +84,7 @@ function setRisk(value, activityScore = null, llmScore = null, quantData = null)
       const processVal = (activityContrib * Number(activityPerc.process || 0)) / 100;
       const networkVal = (activityContrib * Number(activityPerc.network || 0)) / 100;
       const systemVal = (activityContrib * Number(activityPerc.system || 0)) / 100;
-      
+
       segments.push({
         value: processVal,
         color: activityColors.process,
@@ -107,8 +107,8 @@ function setRisk(value, activityScore = null, llmScore = null, quantData = null)
         category: "Activity"
       });
     } else if (activityContrib > 0) {
-      segments.push({ 
-        value: activityContrib, 
+      segments.push({
+        value: activityContrib,
         color: activityColors.process,
         name: "Activity",
         contribution: activityContrib,
@@ -132,8 +132,8 @@ function setRisk(value, activityScore = null, llmScore = null, quantData = null)
         });
       });
     } else if (llmContrib > 0) {
-      segments.push({ 
-        value: llmContrib, 
+      segments.push({
+        value: llmContrib,
         color: llmColors[0],
         name: "LLM",
         contribution: llmContrib,
